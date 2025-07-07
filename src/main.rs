@@ -53,7 +53,7 @@ impl Chip8 {
     }
     fn fetch(&mut self) {}
     fn decode_and_excute(&mut self, inst: u16) {
-        let opcode: u16 = (inst >> 12) & 0b1111;
+        let opcode: u16 = (inst >> 12) & 0xF;
         match opcode {
             0x0 => {
                 if inst == 0xE0 {
@@ -66,7 +66,6 @@ impl Chip8 {
             }
             0x2 => {
                 let index: u16 = inst << 4;
-
                 match self.push(self.pc) {
                     Err(e) => {
                         print!("{}", e)
@@ -77,22 +76,26 @@ impl Chip8 {
             }
             0x3 => {
                 let x: u8 = nibble(&inst, 2);
+                let vx = self.get_register_data(x);
                 let kk: u8 = inst as u8;
-                if x == kk {
+                if vx == kk {
                     self.pc += 2;
                 }
             }
             0x4 => {
                 let x: u8 = nibble(&inst, 2);
+                let vx = self.get_register_data(x);
                 let kk: u8 = inst as u8;
-                if x != kk {
+                if vx != kk {
                     self.pc += 2;
                 }
             }
             0x5 => {
                 let x: u8 = nibble(&inst, 2);
+                let vx = self.get_register_data(x);
                 let y: u8 = nibble(&inst, 1);
-                if x == y {
+                let vy = self.get_register_data(y);
+                if vx == vy {
                     self.pc += 2;
                 }
             }
@@ -103,29 +106,32 @@ impl Chip8 {
             }
             0x7 => {
                 let x: u8 = nibble(&inst, 2);
+                let vx = self.get_register_data(x);
                 let kk: u8 = inst as u8;
-                self.register(x, x + kk);
+                self.register(x, vx + kk);
             }
             0x8 => {
                 let x: u8 = nibble(&inst, 2);
+                let vx: u8 = self.get_register_data(x);
                 let y: u8 = nibble(&inst, 1);
+                let vy: u8 = self.get_register_data(y);
 
                 let indic: u8 = nibble(&inst, 0);
                 match indic {
                     0x0 => {
-                        self.register(x, y);
+                        self.register(x, vy);
                     }
                     0x1 => {
-                        self.register(x, x | y);
+                        self.register(x, vx | vy);
                     }
                     0x2 => {
-                        self.register(x, x & y);
+                        self.register(x, vx & vy);
                     }
                     0x3 => {
-                        self.register(x, x ^ y);
+                        self.register(x, vx ^ vy);
                     }
                     0x4 => {
-                        let (sum, is_overflow) = x.overflowing_add(y);
+                        let (sum, is_overflow) = vx.overflowing_add(vy);
                         if is_overflow {
                             self.register(0xF, 0x1);
                             self.register(x, sum);
@@ -134,30 +140,62 @@ impl Chip8 {
                         self.register(0xF, 0x0);
                     }
                     0x5 => {
-                        if x > y {
+                        if vx > vy {
                             self.register(0xF, 0x1);
-                            self.register(x, x - y);
+                            self.register(x, vx - vy);
                             return;
                         }
                         self.register(0xF, 0x0);
                     }
-                    0x6 => {}
-                    0x7 => {}
-                    0xE => {}
+                    0x6 => {
+                        let lsb: u8 = vx & 0x1;
+                        if lsb == 0x1 {
+                            self.register(0xF, lsb);
+                            self.register(x, vx >> 0x1);
+                        }
+                        self.register(0xF, 0x0);
+                    }
+                    0x7 => {
+                        if vy > vx {
+                            self.register(0xF, 0x1);
+                            self.register(x, vy - vx);
+                        }
+                        self.register(0xF, 0x0);
+                    }
+                    0xE => {
+                        let msb: u8 = (vx >> 7) & 0x1;
+                        if msb == 0x1 {
+                            self.register(0xF, 0x1);
+                            self.register(x, vx << 1);
+                        }
+                        self.register(0xF, 0x0);
+                    }
                     _ => (),
                 }
             }
-            0x9 => println!("9"),
-            0xA => println!("a"),
-            0xB => println!("b"),
-            0xC => println!("c"),
-            0xD => println!("d"),
-            0xE => println!("e"),
-            0xF => println!("f"),
+            0x9 => {
+                let x: u8 = nibble(&inst, 2);
+                let vx: u8 = self.get_register_data(x);
+                let y: u8 = nibble(&inst, 1);
+                let vy: u8 = self.get_register_data(y);
+
+                if vx != vy {
+                    self.pc += 2
+                }
+            }
+            0xA => {}
+            0xB => {}
+            0xC => {}
+            0xD => {}
+            0xE => {}
+            0xF => {}
             _ => println!("overflow"),
         }
     }
 
+    fn get_register_data(&self, regi: u8) -> u8 {
+        self.registers[regi as usize]
+    }
     fn register(&mut self, regi: u8, data: u8) -> Result<(), &'static str> {
         if regi as usize >= self.registers.len() {
             return Err("Overflow");
