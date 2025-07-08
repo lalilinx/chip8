@@ -1,10 +1,10 @@
+use rand::Rng;
 use std::time::{Duration, SystemTime};
 fn main() {
     println!("init");
 }
 
 const FPS: f32 = 16.67;
-
 struct Memory {
     memory: [u8; 4096],
 }
@@ -37,6 +37,14 @@ fn nibble(value: &u16, n: u8) -> u8 {
 }
 
 impl Chip8 {
+    fn init(&mut self) {
+        self.pc = 0x200;
+        self.sp = 0x0;
+
+        //load font to memory
+
+        //
+    }
     fn cycle(&mut self) {
         loop {
             let now = SystemTime::now();
@@ -53,19 +61,19 @@ impl Chip8 {
     }
     fn fetch(&mut self) {}
     fn decode_and_excute(&mut self, inst: u16) {
-        let opcode: u16 = (inst >> 12) & 0xF;
+        let opcode: u16 = (inst >> 0xC) & 0xF;
         match opcode {
             0x0 => {
-                if inst == 0xE0 {
+                if inst == 0x00E0 {
                     // clear frame buffer to 0
                 }
             }
             0x1 => {
-                let index: u16 = inst << 4;
+                let index: u16 = inst & 0x0FFF;
                 self.pc = index;
             }
             0x2 => {
-                let index: u16 = inst << 4;
+                let index: u16 = inst & 0x0FFF;
                 match self.push(self.pc) {
                     Err(e) => {
                         print!("{}", e)
@@ -76,7 +84,7 @@ impl Chip8 {
             }
             0x3 => {
                 let x: u8 = nibble(&inst, 2);
-                let vx = self.get_register_data(x);
+                let vx = self.get_register_data(&x);
                 let kk: u8 = inst as u8;
                 if vx == kk {
                     self.pc += 2;
@@ -84,7 +92,7 @@ impl Chip8 {
             }
             0x4 => {
                 let x: u8 = nibble(&inst, 2);
-                let vx = self.get_register_data(x);
+                let vx = self.get_register_data(&x);
                 let kk: u8 = inst as u8;
                 if vx != kk {
                     self.pc += 2;
@@ -92,9 +100,9 @@ impl Chip8 {
             }
             0x5 => {
                 let x: u8 = nibble(&inst, 2);
-                let vx = self.get_register_data(x);
+                let vx = self.get_register_data(&x);
                 let y: u8 = nibble(&inst, 1);
-                let vy = self.get_register_data(y);
+                let vy = self.get_register_data(&y);
                 if vx == vy {
                     self.pc += 2;
                 }
@@ -106,15 +114,15 @@ impl Chip8 {
             }
             0x7 => {
                 let x: u8 = nibble(&inst, 2);
-                let vx = self.get_register_data(x);
+                let vx = self.get_register_data(&x);
                 let kk: u8 = inst as u8;
                 self.register(x, vx + kk);
             }
             0x8 => {
                 let x: u8 = nibble(&inst, 2);
-                let vx: u8 = self.get_register_data(x);
+                let vx: u8 = self.get_register_data(&x);
                 let y: u8 = nibble(&inst, 1);
-                let vy: u8 = self.get_register_data(y);
+                let vy: u8 = self.get_register_data(&y);
 
                 let indic: u8 = nibble(&inst, 0);
                 match indic {
@@ -175,17 +183,31 @@ impl Chip8 {
             }
             0x9 => {
                 let x: u8 = nibble(&inst, 2);
-                let vx: u8 = self.get_register_data(x);
+                let vx: u8 = self.get_register_data(&x);
                 let y: u8 = nibble(&inst, 1);
-                let vy: u8 = self.get_register_data(y);
+                let vy: u8 = self.get_register_data(&y);
 
                 if vx != vy {
-                    self.pc += 2
+                    self.pc -= 2;
                 }
             }
-            0xA => {}
-            0xB => {}
-            0xC => {}
+            0xA => {
+                let n: u16 = inst & 0x0FFF;
+                self.i = n;
+            }
+            0xB => {
+                let n: u16 = inst << 4;
+                let v0: u8 = self.get_register_data(&0x0);
+                self.pc = n + v0 as u16;
+            }
+            0xC => {
+                let x: u8 = nibble(&inst, 2);
+                let vx: u8 = self.get_register_data(&x);
+                let kk: u8 = inst as u8;
+                let ranNum: u8 = rand::thread_rng().r#gen();
+
+                self.register(x, vx & kk);
+            }
             0xD => {}
             0xE => {}
             0xF => {}
@@ -193,9 +215,10 @@ impl Chip8 {
         }
     }
 
-    fn get_register_data(&self, regi: u8) -> u8 {
-        self.registers[regi as usize]
+    fn get_register_data(&self, regi: &u8) -> u8 {
+        self.registers[*regi as usize]
     }
+
     fn register(&mut self, regi: u8, data: u8) -> Result<(), &'static str> {
         if regi as usize >= self.registers.len() {
             return Err("Overflow");
