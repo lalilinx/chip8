@@ -1,18 +1,55 @@
 use rand::Rng;
 use std::time::{Duration, SystemTime};
+
 fn main() {
     println!("init");
+
+    loop {
+        // let now = SystemTime::now();
+
+        // match now.elapsed() {
+        //     Ok(elapsed) => {
+        //         println!("{}", elapsed.as_millis());
+        //     }
+        //     Err(e) => {
+        //         println!("SystemTimeError difference: {:?}", e.duration());
+        //     }
+        // }
+    }
 }
 
 const FPS: f32 = 16.67;
-struct Memory {
-    memory: [u8; 4096],
-}
+const SCREEN_WIDTH: u8 = 64;
+const SCREEN_HEIGHT: u8 = 32;
+const FONTSET_START_ADDRESS: u16 = 0x50;
 
-impl Memory {
-    fn read(&self) {}
-    fn write(&mut self, address: u16, data: u8) {}
-}
+const FONTSET: [u8; 80] = [
+    0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
+    0x20, 0x60, 0x20, 0x20, 0x70, // 1
+    0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
+    0xF0, 0x10, 0xF0, 0x10, 0xF0, // 3
+    0x90, 0x90, 0xF0, 0x10, 0x10, // 4
+    0xF0, 0x80, 0xF0, 0x10, 0xF0, // 5
+    0xF0, 0x80, 0xF0, 0x90, 0xF0, // 6
+    0xF0, 0x10, 0x20, 0x40, 0x40, // 7
+    0xF0, 0x90, 0xF0, 0x90, 0xF0, // 8
+    0xF0, 0x90, 0xF0, 0x10, 0xF0, // 9
+    0xF0, 0x90, 0xF0, 0x90, 0x90, // A
+    0xE0, 0x90, 0xE0, 0x90, 0xE0, // B
+    0xF0, 0x80, 0x80, 0x80, 0xF0, // C
+    0xE0, 0x90, 0x90, 0x90, 0xE0, // D
+    0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
+    0xF0, 0x80, 0xF0, 0x80, 0x80, // F
+];
+
+// struct Memory {
+//     memory: [u8; 4096],
+// }
+
+// impl Memory {
+//     fn read(&self) {}
+//     fn write(&mut self, address: u16, data: u8) {}
+// }
 
 // struct FrameBuffer {
 //     buffer: []
@@ -28,8 +65,9 @@ struct Chip8 {
     sound_timer: u8,
     keypad: [bool; 16],
 
-    memory: Memory,
-    // frame: [u8; ]
+    memory: [u8; 4096],
+    frame_buffer: [[u8; 63]; 32], // memory: Memory,
+                                  // frame: [u8; ]
 }
 
 fn nibble(value: &u16, n: u8) -> u8 {
@@ -42,22 +80,25 @@ impl Chip8 {
         self.sp = 0x0;
 
         //load font to memory
-
         //
     }
     fn cycle(&mut self) {
-        loop {
-            let now = SystemTime::now();
+        // loop {
+        let opcode: u16 = (self.memory[self.pc as usize] as u16) << 8
+            | (self.memory[(self.pc + 0x1) as usize]) as u16;
 
-            match now.elapsed() {
-                Ok(elapsed) => {
-                    println!("{}", elapsed.as_millis());
-                }
-                Err(e) => {
-                    println!("SystemTimeError difference: {:?}", e.duration());
-                }
-            }
-        }
+        self.pc += 2;
+
+        //decode and execute
+
+        // if self.delay_timer > 0 {
+        //     self.delay_timer -= 1;
+        // }
+
+        // if self.sound_timer > 0 {
+        //     self.sound_timer -= 1;
+        // }
+        // }
     }
     fn fetch(&mut self) {}
     fn decode_and_excute(&mut self, inst: u16) {
@@ -84,7 +125,7 @@ impl Chip8 {
             }
             0x3 => {
                 let x: u8 = nibble(&inst, 2);
-                let vx = self.get_register_data(&x);
+                let vx: u8 = self.get_register_data(&x);
                 let kk: u8 = inst as u8;
                 if vx == kk {
                     self.pc += 2;
@@ -92,7 +133,7 @@ impl Chip8 {
             }
             0x4 => {
                 let x: u8 = nibble(&inst, 2);
-                let vx = self.get_register_data(&x);
+                let vx: u8 = self.get_register_data(&x);
                 let kk: u8 = inst as u8;
                 if vx != kk {
                     self.pc += 2;
@@ -100,9 +141,9 @@ impl Chip8 {
             }
             0x5 => {
                 let x: u8 = nibble(&inst, 2);
-                let vx = self.get_register_data(&x);
+                let vx: u8 = self.get_register_data(&x);
                 let y: u8 = nibble(&inst, 1);
-                let vy = self.get_register_data(&y);
+                let vy: u8 = self.get_register_data(&y);
                 if vx == vy {
                     self.pc += 2;
                 }
@@ -114,7 +155,7 @@ impl Chip8 {
             }
             0x7 => {
                 let x: u8 = nibble(&inst, 2);
-                let vx = self.get_register_data(&x);
+                let vx: u8 = self.get_register_data(&x);
                 let kk: u8 = inst as u8;
                 self.register(x, vx + kk);
             }
@@ -208,12 +249,107 @@ impl Chip8 {
 
                 self.register(x, vx & kk);
             }
-            0xD => {}
-            0xE => {}
-            0xF => {}
-            _ => println!("overflow"),
+            0xD => {
+                let x: u8 = nibble(&inst, 2);
+                let vx = self.get_register_data(&x) as usize;
+                let y: u8 = nibble(&inst, 1);
+                let vy = self.get_register_data(&y) as usize;
+
+                let n = (inst & 0x000F) as usize;
+                let i = self.i as usize;
+
+                let mut vf: u8 = 0x0;
+                for row in 0..n {
+                    let cur_sprite = self.memory[(i + row)];
+                    for col in 0..8usize {
+                        if cur_sprite & (0x80 >> col) == 1 {
+                            let idx_x = (vx + col) % SCREEN_WIDTH as usize;
+                            let idx_y = (vy + row) % SCREEN_HEIGHT as usize;
+                            if self.frame_buffer[idx_y][idx_x] == 0x1 {
+                                vf = 0x1;
+                            }
+                            self.frame_buffer[idx_y][idx_x] ^= 1;
+                        }
+                    }
+                }
+                self.register(0xF, vf);
+            }
+            0xE => {
+                let x: u8 = nibble(&inst, 2);
+                let vx: u8 = self.get_register_data(&x);
+
+                let indic: u16 = inst & 0x00FF;
+                match indic {
+                    0x9E => {
+                        let is_press = self.keypad[vx as usize];
+                        if is_press {
+                            self.pc += 2;
+                        }
+                    }
+                    0xA1 => {
+                        let is_press = self.keypad[vx as usize];
+                        if !is_press {
+                            self.pc += 2;
+                        }
+                    }
+                    _ => (),
+                }
+            }
+            0xF => {
+                let x: u8 = nibble(&inst, 2);
+                let vx: u8 = self.get_register_data(&x);
+
+                let indic: u16 = inst & 0x00FF;
+                match indic {
+                    0x7 => {
+                        self.register(x, self.delay_timer);
+                    }
+                    0xA => {
+                        for key in 0..16 {
+                            if self.keypad[key] {
+                                self.register(x, key as u8);
+                                return;
+                            }
+                        }
+                        self.pc -= 2;
+                    }
+                    0x15 => {
+                        self.delay_timer = vx;
+                    }
+                    0x18 => {
+                        self.sound_timer = vx;
+                    }
+                    0x1E => {
+                        self.i += vx as u16;
+                    }
+                    0x29 => {
+                        self.i = FONTSET_START_ADDRESS + (vx as u16 * 5);
+                    }
+                    0x33 => {
+                        self.memory[self.i as usize] = (vx / 100) as u8; // 100
+                        self.memory[(self.i + 1) as usize] = ((vx / 10) % 10) as u8; // 10
+                        self.memory[(self.i + 2) as usize] = (vx % 10) as u8; // 1
+                    }
+                    0x55 => {
+                        for v in self.registers.iter().take((x + 1) as usize) {
+                            self.memory[self.i as usize] = *v;
+                            self.i += 1;
+                        }
+                    }
+                    0x65 => {
+                        for v in 0..x + 1 {
+                            self.register(v, self.memory[self.i as usize]);
+                            self.i += 1;
+                        }
+                    }
+                    _ => (),
+                }
+            }
+            _ => (),
         }
     }
+
+    fn get_sprite(&self, i: &u16, n: &u8) {}
 
     fn get_register_data(&self, regi: &u8) -> u8 {
         self.registers[*regi as usize]
