@@ -1,24 +1,7 @@
 use rand::Rng;
 use std::time::{Duration, SystemTime};
 
-fn main() {
-    println!("init");
-
-    loop {
-        // let now = SystemTime::now();
-
-        // match now.elapsed() {
-        //     Ok(elapsed) => {
-        //         println!("{}", elapsed.as_millis());
-        //     }
-        //     Err(e) => {
-        //         println!("SystemTimeError difference: {:?}", e.duration());
-        //     }
-        // }
-    }
-}
-
-const FPS: f32 = 16.67;
+const FPS: f32 = 16.67; // 60 frames per second or 60 Hz
 const SCREEN_WIDTH: u8 = 64;
 const SCREEN_HEIGHT: u8 = 32;
 const FONTSET_START_ADDRESS: u16 = 0x50;
@@ -42,18 +25,25 @@ const FONTSET: [u8; 80] = [
     0xF0, 0x80, 0xF0, 0x80, 0x80, // F
 ];
 
-// struct Memory {
-//     memory: [u8; 4096],
-// }
+fn main() {
+    println!("init");
 
-// impl Memory {
-//     fn read(&self) {}
-//     fn write(&mut self, address: u16, data: u8) {}
-// }
+    loop {
+        // let now = SystemTime::now();
 
-// struct FrameBuffer {
-//     buffer: []
-// }
+        // match now.elapsed() {
+        //     Ok(elapsed) => {
+        //         println!("{}", elapsed.as_millis());
+        //     }
+        //     Err(e) => {
+        //         println!("SystemTimeError difference: {:?}", e.duration());
+        //     }
+        // }
+
+        // sub delay_timer by 1 at 60 Hz
+        // sub sound_timer by 1 at 60 Hz
+    }
+}
 
 struct Chip8 {
     registers: [u8; 16],
@@ -84,26 +74,28 @@ impl Chip8 {
     }
     fn cycle(&mut self) {
         // loop {
-        let opcode: u16 = (self.memory[self.pc as usize] as u16) << 8
-            | (self.memory[(self.pc + 0x1) as usize]) as u16;
+        let opcode: u16 = self.fetch();
 
         self.pc += 2;
 
         //decode and execute
+        self.decode_and_execute(opcode);
 
-        // if self.delay_timer > 0 {
-        //     self.delay_timer -= 1;
-        // }
+        if self.delay_timer > 0 {
+            self.delay_timer -= 1;
+        }
 
-        // if self.sound_timer > 0 {
-        //     self.sound_timer -= 1;
-        // }
-        // }
+        if self.sound_timer > 0 {
+            self.sound_timer -= 1;
+        }
     }
-    fn fetch(&mut self) {}
-    fn decode_and_excute(&mut self, inst: u16) {
-        let opcode: u16 = (inst >> 0xC) & 0xF;
-        match opcode {
+    fn fetch(&self) -> u16 {
+        (self.memory[self.pc as usize] as u16) << 0x8
+            | (self.memory[(self.pc + 0x1) as usize]) as u16
+    }
+    fn decode_and_execute(&mut self, inst: u16) {
+        let _opcode: u16 = (inst >> 0xC) & 0xF;
+        match _opcode {
             0x0 => {
                 if inst == 0x00E0 {
                     // clear frame buffer to 0
@@ -260,7 +252,7 @@ impl Chip8 {
 
                 let mut vf: u8 = 0x0;
                 for row in 0..n {
-                    let cur_sprite = self.memory[(i + row)];
+                    let cur_sprite = self.memory[i + row];
                     for col in 0..8usize {
                         if cur_sprite & (0x80 >> col) == 1 {
                             let idx_x = (vx + col) % SCREEN_WIDTH as usize;
