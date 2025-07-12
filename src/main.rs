@@ -1,10 +1,14 @@
 use rand::Rng;
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, Instant};
 
 const FPS: f32 = 16.67; // 60 frames per second or 60 Hz
 const SCREEN_WIDTH: u8 = 64;
 const SCREEN_HEIGHT: u8 = 32;
 const FONTSET_START_ADDRESS: u16 = 0x50;
+
+const INSTRUCTION_HZ: u64 = 700;
+const RENDER_HZ: u64 = 120;
+const TIMER_HZ: u64 = 60;
 
 const FONTSET: [u8; 80] = [
     0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
@@ -26,22 +30,46 @@ const FONTSET: [u8; 80] = [
 ];
 
 fn main() {
-    println!("init");
+    let mut draw_flag: bool = false;
+    let instruction_interval = Duration::from_nanos(1_000_000_000 / INSTRUCTION_HZ);
+    let render_interval = Duration::from_nanos(1_000_000_000 / RENDER_HZ);
+    let timer_interval = Duration::from_nanos(1_000_000_000 / TIMER_HZ);
+
+    let mut last_instruction_tick = Instant::now();
+    let mut last_render_tick = Instant::now();
+    let mut last_timer_tick = Instant::now();
 
     loop {
-        // let now = SystemTime::now();
+        let now = Instant::now();
 
-        // match now.elapsed() {
-        //     Ok(elapsed) => {
-        //         println!("{}", elapsed.as_millis());
-        //     }
-        //     Err(e) => {
-        //         println!("SystemTimeError difference: {:?}", e.duration());
-        //     }
-        // }
+        while now.duration_since(last_instruction_tick) >= instruction_interval {
+            // fetch, decode, and execute instructions
+            last_instruction_tick += instruction_interval;
+        }
 
-        // sub delay_timer by 1 at 60 Hz
-        // sub sound_timer by 1 at 60 Hz
+        if draw_flag && now.duration_since(last_render_tick) >= render_interval {
+            // render frame buffer to screen
+
+            last_render_tick += render_interval;
+            draw_flag = false;
+        }
+
+        while now.duration_since(last_timer_tick) >= timer_interval {
+            // update delay_timers and sound_timers
+            last_timer_tick += timer_interval;
+        }
+
+        let next_instruction_tick = last_instruction_tick + instruction_interval;
+        let next_render_tick = last_render_tick + render_interval;
+        let next_timer_tick = last_timer_tick + timer_interval;
+
+        let next_tick = next_instruction_tick
+            .min(next_render_tick)
+            .min(next_timer_tick);
+        let sleep_duration = next_tick.duration_since(now);
+        if sleep_duration > Duration::from_millis(0) {
+            std::thread::sleep(sleep_duration);
+        }
     }
 }
 
@@ -56,6 +84,8 @@ struct Chip8 {
     keypad: [bool; 16],
 
     memory: [u8; 4096],
+
+    draw_flag: bool,
     frame_buffer: [[u8; 63]; 32], // memory: Memory,
                                   // frame: [u8; ]
 }
