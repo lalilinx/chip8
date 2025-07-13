@@ -1,5 +1,13 @@
 use rand::Rng;
 use std::time::{Duration, Instant};
+use winit::application::ApplicationHandler;
+use winit::dpi::LogicalSize;
+// use winit::event::WindowEvent;
+use winit::event::{Event, WindowEvent};
+use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
+use winit::keyboard::KeyCode;
+use winit::window::{Window, WindowId};
+// use winit_input_helper::WinitInputHelper;
 
 const FPS: f32 = 16.67; // 60 frames per second or 60 Hz
 const SCREEN_WIDTH: u8 = 64;
@@ -29,48 +37,102 @@ const FONTSET: [u8; 80] = [
     0xF0, 0x80, 0xF0, 0x80, 0x80, // F
 ];
 
-fn main() {
-    let mut draw_flag: bool = false;
-    let instruction_interval = Duration::from_nanos(1_000_000_000 / INSTRUCTION_HZ);
-    let render_interval = Duration::from_nanos(1_000_000_000 / RENDER_HZ);
-    let timer_interval = Duration::from_nanos(1_000_000_000 / TIMER_HZ);
+#[derive(Default)]
+struct App {
+    window: Option<Window>,
+}
 
-    let mut last_instruction_tick = Instant::now();
-    let mut last_render_tick = Instant::now();
-    let mut last_timer_tick = Instant::now();
+impl ApplicationHandler for App {
+    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        self.window = Some(
+            event_loop
+                .create_window({
+                    let size =
+                        LogicalSize::new(SCREEN_WIDTH as f64 * 10.0, SCREEN_HEIGHT as f64 * 10.0);
+                    Window::default_attributes()
+                        .with_title("Chip8 Emulator")
+                        .with_inner_size(size)
+                        .with_min_inner_size(size)
+                })
+                .unwrap(),
+        );
+    }
 
-    loop {
-        let now = Instant::now();
+    fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
+        match event {
+            WindowEvent::CloseRequested => {
+                println!("The close button was pressed; stopping");
+                event_loop.exit();
+            }
+            WindowEvent::RedrawRequested => {
+                // Redraw the application.
+                //
+                // It's preferable for applications that do not render continuously to render in
+                // this event rather than in AboutToWait, since rendering in here allows
+                // the program to gracefully handle redraws requested by the OS.
 
-        while now.duration_since(last_instruction_tick) >= instruction_interval {
-            // fetch, decode, and execute instructions
-            last_instruction_tick += instruction_interval;
-        }
+                // Draw.
 
-        if draw_flag && now.duration_since(last_render_tick) >= render_interval {
-            // render frame buffer to screen
-
-            last_render_tick += render_interval;
-            draw_flag = false;
-        }
-
-        while now.duration_since(last_timer_tick) >= timer_interval {
-            // update delay_timers and sound_timers
-            last_timer_tick += timer_interval;
-        }
-
-        let next_instruction_tick = last_instruction_tick + instruction_interval;
-        let next_render_tick = last_render_tick + render_interval;
-        let next_timer_tick = last_timer_tick + timer_interval;
-
-        let next_tick = next_instruction_tick
-            .min(next_render_tick)
-            .min(next_timer_tick);
-        let sleep_duration = next_tick.duration_since(now);
-        if sleep_duration > Duration::from_millis(0) {
-            std::thread::sleep(sleep_duration);
+                // Queue a RedrawRequested event.
+                //
+                // You only need to call this if you've determined that you need to redraw in
+                // applications which do not always need to. Applications that redraw continuously
+                // can render here instead.
+                self.window.as_ref().unwrap().request_redraw();
+            }
+            _ => (),
         }
     }
+}
+
+fn main() {
+    let event_loop = EventLoop::new().unwrap();
+    event_loop.set_control_flow(ControlFlow::Poll);
+    let mut app = App::default();
+    event_loop.run_app(&mut app);
+
+    // let mut draw_flag: bool = false;
+    // let instruction_interval = Duration::from_nanos(1_000_000_000 / INSTRUCTION_HZ);
+    // let render_interval = Duration::from_nanos(1_000_000_000 / RENDER_HZ);
+    // let timer_interval = Duration::from_nanos(1_000_000_000 / TIMER_HZ);
+
+    // let mut last_instruction_tick = Instant::now();
+    // let mut last_render_tick = Instant::now();
+    // let mut last_timer_tick = Instant::now();
+
+    // loop {
+    //     let now = Instant::now();
+
+    //     //using while loop for catch up missing execution instructions (gen-ai suggestion)
+    //     while now.duration_since(last_instruction_tick) >= instruction_interval {
+    //         // fetch, decode, and execute instructions
+    //         last_instruction_tick += instruction_interval;
+    //     }
+
+    //     if draw_flag && now.duration_since(last_render_tick) >= render_interval {
+    //         // render frame buffer to screen
+
+    //         last_render_tick += render_interval;
+    //         draw_flag = false;
+    //     }
+
+    //     while now.duration_since(last_timer_tick) >= timer_interval {
+    //         // update delay_timers and sound_timers
+    //         last_timer_tick += timer_interval;
+    //     }
+
+    //     let next_instruction_tick = last_instruction_tick + instruction_interval;
+    //     let next_render_tick = last_render_tick + render_interval;
+    //     let next_timer_tick = last_timer_tick + timer_interval;
+
+    //     let next_tick = next_instruction_tick
+    //         .min(next_render_tick)
+    //         .min(next_timer_tick);
+    //     let sleep_duration = next_tick.duration_since(now);
+    //     if sleep_duration > Duration::from_millis(0) {
+    //         std::thread::sleep(sleep_duration);
+    //     }
+    // }
 }
 
 struct Chip8 {
@@ -127,8 +189,23 @@ impl Chip8 {
         let _opcode: u16 = (inst >> 0xC) & 0xF;
         match _opcode {
             0x0 => {
-                if inst == 0x00E0 {
-                    // clear frame buffer to 0
+                match inst & 0x0FFF {
+                    0x00E0 => {
+                        // clear screen
+                        self.frame_buffer = [[0; 63]; 32];
+                        self.draw_flag = true;
+                    }
+                    0x00EE => {
+                        // return from subroutine
+                        self.pc = match self.pop() {
+                            Some(addr) => addr,
+                            None => {
+                                print!("Stack underflow");
+                                return;
+                            }
+                        };
+                    }
+                    _ => (),
                 }
             }
             0x1 => {
