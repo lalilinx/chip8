@@ -1,13 +1,15 @@
+use pixels::{Pixels, SurfaceTexture};
 use rand::Rng;
 use std::time::{Duration, Instant};
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
-// use winit::event::WindowEvent;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::KeyCode;
 use winit::window::{Window, WindowId};
-// use winit_input_helper::WinitInputHelper;
+
+use egui::Context as EguiContext;
+use egui_winit::State as EguiWinitState;
 
 const FPS: f32 = 16.67; // 60 frames per second or 60 Hz
 const SCREEN_WIDTH: u8 = 64;
@@ -40,22 +42,28 @@ const FONTSET: [u8; 80] = [
 #[derive(Default)]
 struct App {
     window: Option<Window>,
+    pixels: Option<Pixels>,
 }
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        self.window = Some(
-            event_loop
-                .create_window({
-                    let size =
-                        LogicalSize::new(SCREEN_WIDTH as f64 * 10.0, SCREEN_HEIGHT as f64 * 10.0);
-                    Window::default_attributes()
-                        .with_title("Chip8 Emulator")
-                        .with_inner_size(size)
-                        .with_min_inner_size(size)
-                })
-                .unwrap(),
-        );
+        let window = event_loop
+            .create_window({
+                let size =
+                    LogicalSize::new(SCREEN_WIDTH as f64 * 10.0, SCREEN_HEIGHT as f64 * 10.0);
+                Window::default_attributes()
+                    .with_title("Chip8 Emulator")
+                    .with_inner_size(size)
+                    .with_min_inner_size(size)
+            })
+            .unwrap();
+        let window_size = window.inner_size();
+        let surface_texture = SurfaceTexture::new(window_size.width, window_size.height, &window);
+        let pixels =
+            Pixels::new(SCREEN_WIDTH as u32, SCREEN_HEIGHT as u32, surface_texture).unwrap();
+
+        self.window = Some(window);
+        self.pixels = Some(pixels);
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
@@ -78,7 +86,7 @@ impl ApplicationHandler for App {
                 // You only need to call this if you've determined that you need to redraw in
                 // applications which do not always need to. Applications that redraw continuously
                 // can render here instead.
-                self.window.as_ref().unwrap().request_redraw();
+                // self.window.as_ref().unwrap().request_redraw();
             }
             _ => (),
         }
