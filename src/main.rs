@@ -1,15 +1,11 @@
-use pixels::{Pixels, SurfaceTexture};
+use pixels::{Error, Pixels, SurfaceTexture};
 use rand::Rng;
-use std::time::{Duration, Instant};
-use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
 use winit::event::{Event, WindowEvent};
-use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
+use winit::event_loop::EventLoop;
 use winit::keyboard::KeyCode;
-use winit::window::{Window, WindowId};
-
-use egui::Context as EguiContext;
-use egui_winit::State as EguiWinitState;
+use winit::window::WindowBuilder;
+use winit_input_helper::WinitInputHelper;
 
 const FPS: f32 = 16.67; // 60 frames per second or 60 Hz
 const SCREEN_WIDTH: u8 = 64;
@@ -39,66 +35,26 @@ const FONTSET: [u8; 80] = [
     0xF0, 0x80, 0xF0, 0x80, 0x80, // F
 ];
 
-#[derive(Default)]
-struct App {
-    window: Option<Window>,
-    pixels: Option<Pixels>,
-}
+fn main() -> Result<(), Error> {
+    let event_loop = EventLoop::new().unwrap();
+    let mut input = WinitInputHelper::new();
+    let window = {
+        let size = LogicalSize::new(SCREEN_WIDTH as f64, SCREEN_HEIGHT as f64);
+        WindowBuilder::new()
+            .with_title("Chip8 Emulator")
+            .with_inner_size(size)
+            .with_min_inner_size(size)
+            .build(&event_loop)
+            .unwrap()
+    };
 
-impl ApplicationHandler for App {
-    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        let window = event_loop
-            .create_window({
-                let size =
-                    LogicalSize::new(SCREEN_WIDTH as f64 * 10.0, SCREEN_HEIGHT as f64 * 10.0);
-                Window::default_attributes()
-                    .with_title("Chip8 Emulator")
-                    .with_inner_size(size)
-                    .with_min_inner_size(size)
-            })
-            .unwrap();
+    let mut pixels = {
         let window_size = window.inner_size();
         let surface_texture = SurfaceTexture::new(window_size.width, window_size.height, &window);
-        let pixels =
-            Pixels::new(SCREEN_WIDTH as u32, SCREEN_HEIGHT as u32, surface_texture).unwrap();
+        Pixels::new(SCREEN_WIDTH as u32, SCREEN_HEIGHT as u32, surface_texture)?
+    };
 
-        self.window = Some(window);
-        self.pixels = Some(pixels);
-    }
-
-    fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
-        match event {
-            WindowEvent::CloseRequested => {
-                println!("The close button was pressed; stopping");
-                event_loop.exit();
-            }
-            WindowEvent::RedrawRequested => {
-                // Redraw the application.
-                //
-                // It's preferable for applications that do not render continuously to render in
-                // this event rather than in AboutToWait, since rendering in here allows
-                // the program to gracefully handle redraws requested by the OS.
-
-                // Draw.
-
-                // Queue a RedrawRequested event.
-                //
-                // You only need to call this if you've determined that you need to redraw in
-                // applications which do not always need to. Applications that redraw continuously
-                // can render here instead.
-                // self.window.as_ref().unwrap().request_redraw();
-            }
-            _ => (),
-        }
-    }
-}
-
-fn main() {
-    let event_loop = EventLoop::new().unwrap();
-    event_loop.set_control_flow(ControlFlow::Poll);
-    let mut app = App::default();
-    event_loop.run_app(&mut app);
-
+    Ok(())
     // let mut draw_flag: bool = false;
     // let instruction_interval = Duration::from_nanos(1_000_000_000 / INSTRUCTION_HZ);
     // let render_interval = Duration::from_nanos(1_000_000_000 / RENDER_HZ);
