@@ -3,7 +3,7 @@ use rand::Rng;
 use winit::dpi::LogicalSize;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::EventLoop;
-use winit::keyboard::KeyCode;
+use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::WindowBuilder;
 use winit_input_helper::WinitInputHelper;
 
@@ -39,7 +39,7 @@ fn main() -> Result<(), Error> {
     let event_loop = EventLoop::new().unwrap();
     let mut input = WinitInputHelper::new();
     let window = {
-        let size = LogicalSize::new(SCREEN_WIDTH as f64, SCREEN_HEIGHT as f64);
+        let size = LogicalSize::new(SCREEN_WIDTH as f64 * 10.0, SCREEN_HEIGHT as f64 * 10.0);
         WindowBuilder::new()
             .with_title("Chip8 Emulator")
             .with_inner_size(size)
@@ -54,7 +54,32 @@ fn main() -> Result<(), Error> {
         Pixels::new(SCREEN_WIDTH as u32, SCREEN_HEIGHT as u32, surface_texture)?
     };
 
-    Ok(())
+    let res = event_loop.run(|event, event_loop_window_target| {
+        match event {
+            Event::WindowEvent {
+                event: WindowEvent::CloseRequested,
+                ..
+            } => {
+                println!("Window close requested");
+                event_loop_window_target.exit();
+            }
+
+            Event::WindowEvent {
+                event: WindowEvent::KeyboardInput { event, .. },
+                ..
+            } => match event.physical_key {
+                PhysicalKey::Code(KeyCode::KeyQ) => println!("Key Q pressed"),
+                PhysicalKey::Code(KeyCode::KeyW) => println!("Key W pressed"),
+                PhysicalKey::Code(KeyCode::KeyE) => println!("Key E pressed"),
+                PhysicalKey::Code(KeyCode::KeyR) => println!("Key R pressed"),
+                _ => {}
+            },
+            _ => {}
+        }
+        // window.request_redraw();
+    });
+    res.map_err(|e| Error::UserDefined(Box::new(e)))
+
     // let mut draw_flag: bool = false;
     // let instruction_interval = Duration::from_nanos(1_000_000_000 / INSTRUCTION_HZ);
     // let render_interval = Duration::from_nanos(1_000_000_000 / RENDER_HZ);
