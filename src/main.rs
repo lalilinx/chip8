@@ -1,5 +1,7 @@
 use pixels::{Error, Pixels, SurfaceTexture};
 use rand::Rng;
+use std::sync::mpsc;
+use std::thread;
 use winit::dpi::LogicalSize;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::EventLoop;
@@ -36,6 +38,7 @@ const FONTSET: [u8; 80] = [
 ];
 
 fn main() -> Result<(), Error> {
+    let (tx, rx) = mpsc::channel::<&[u8]>();
     let event_loop = EventLoop::new().unwrap();
     let mut input = WinitInputHelper::new();
     let window = {
@@ -53,6 +56,10 @@ fn main() -> Result<(), Error> {
         let surface_texture = SurfaceTexture::new(window_size.width, window_size.height, &window);
         Pixels::new(SCREEN_WIDTH as u32, SCREEN_HEIGHT as u32, surface_texture)?
     };
+
+    thread::spawn(move || {
+        // loop for chip8 emulator
+    });
 
     let res = event_loop.run(|event, event_loop_window_target| {
         match event {
@@ -74,8 +81,16 @@ fn main() -> Result<(), Error> {
                 PhysicalKey::Code(KeyCode::KeyR) => println!("Key R pressed"),
                 _ => {}
             },
+            Event::WindowEvent {
+                event: WindowEvent::RedrawRequested,
+                ..
+            } => {
+                // Redraw the window
+                // call rx
+            }
             _ => {}
         }
+
         // window.request_redraw();
     });
     res.map_err(|e| Error::UserDefined(Box::new(e)))
