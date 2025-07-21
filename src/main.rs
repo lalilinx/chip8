@@ -4,7 +4,7 @@ use std::sync::mpsc;
 use std::thread;
 use winit::dpi::LogicalSize;
 use winit::event::{Event, WindowEvent};
-use winit::event_loop::EventLoop;
+use winit::event_loop::{ControlFlow, EventLoop};
 use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::WindowBuilder;
 use winit_input_helper::WinitInputHelper;
@@ -38,8 +38,9 @@ const FONTSET: [u8; 80] = [
 ];
 
 fn main() -> Result<(), Error> {
-    let (tx, rx) = mpsc::channel::<&[u8]>();
+    // let (tx, rx) = mpsc::channel::<&[u8]>();
     let event_loop = EventLoop::new().unwrap();
+    event_loop.set_control_flow(ControlFlow::Poll);
     let mut input = WinitInputHelper::new();
     let window = {
         let size = LogicalSize::new(SCREEN_WIDTH as f64 * 10.0, SCREEN_HEIGHT as f64 * 10.0);
@@ -57,11 +58,12 @@ fn main() -> Result<(), Error> {
         Pixels::new(SCREEN_WIDTH as u32, SCREEN_HEIGHT as u32, surface_texture)?
     };
 
-    thread::spawn(move || {
-        // loop for chip8 emulator
-    });
+    // thread::spawn(move || {
+    //     // loop for chip8 emulator
+    // });
 
     let res = event_loop.run(|event, event_loop_window_target| {
+        println!("Event: {:?}", event);
         match event {
             Event::WindowEvent {
                 event: WindowEvent::CloseRequested,
@@ -87,6 +89,11 @@ fn main() -> Result<(), Error> {
             } => {
                 // Redraw the window
                 // call rx
+                println!("Redraw requested");
+            }
+            Event::AboutToWait => {
+                // read rx to render
+                // window.request_redraw();
             }
             _ => {}
         }
