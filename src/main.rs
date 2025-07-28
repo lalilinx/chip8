@@ -1,7 +1,7 @@
 use pixels::{Error, Pixels, SurfaceTexture};
 use rand::Rng;
-use std::sync::mpsc;
-use std::thread;
+use std::sync::{Arc, Mutex, mpsc};
+use std::{string, thread};
 use winit::dpi::LogicalSize;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
@@ -40,7 +40,7 @@ const FONTSET: [u8; 80] = [
 fn main() -> Result<(), Error> {
     // let (tx, rx) = mpsc::channel::<&[u8]>();
     let event_loop = EventLoop::new().unwrap();
-    event_loop.set_control_flow(ControlFlow::Poll);
+    // event_loop.set_control_flow(ControlFlow::Poll);
     let mut input = WinitInputHelper::new();
     let window = {
         let size = LogicalSize::new(SCREEN_WIDTH as f64 * 10.0, SCREEN_HEIGHT as f64 * 10.0);
@@ -51,6 +51,8 @@ fn main() -> Result<(), Error> {
             .build(&event_loop)
             .unwrap()
     };
+
+    let screen_buffer = Arc::new(Mutex::new([[0; 64]; 32]));
 
     let mut pixels = {
         let window_size = window.inner_size();
@@ -89,7 +91,19 @@ fn main() -> Result<(), Error> {
             } => {
                 // Redraw the window
                 // call rx
-                println!("Redraw requested");
+                let buf = screen_buffer.lock().unwrap();
+                let frame = pixels.frame_mut();
+                for (i, row) in buf.iter().enumerate() {
+                    for (j, col) in row.iter().enumerate() {
+                        let v = if *col == 1 { 0xFF } else { 0x00 };
+                        let ofset = i * j * 4;
+                        frame[ofset..ofset + 4].copy_from_slice(&[v, v, v, 0xFF]);
+                    }
+                }
+
+                if pixels.render().is_err() {
+                    event_loop_window_target.exit();
+                }
             }
             Event::AboutToWait => {
                 // read rx to render
@@ -159,7 +173,7 @@ struct Chip8 {
     memory: [u8; 4096],
 
     draw_flag: bool,
-    frame_buffer: [[u8; 63]; 32], // memory: Memory,
+    frame_buffer: [[u8; 64]; 32], // memory: Memory,
                                   // frame: [u8; ]
 }
 
@@ -175,6 +189,7 @@ impl Chip8 {
         //load font to memory
         //
     }
+    fn load_rom(&mut self, path: String) {}
     fn cycle(&mut self) {
         // loop {
         let opcode: u16 = self.fetch();
@@ -203,7 +218,7 @@ impl Chip8 {
                 match inst & 0x0FFF {
                     0x00E0 => {
                         // clear screen
-                        self.frame_buffer = [[0; 63]; 32];
+                        self.frame_buffer = [[0; 64]; 32];
                         self.draw_flag = true;
                     }
                     0x00EE => {
