@@ -1,6 +1,8 @@
+use pixels::wgpu::Instance;
 use pixels::{Error, Pixels, SurfaceTexture};
 use rand::Rng;
 use std::sync::{Arc, Mutex, mpsc};
+use std::time::{Duration, Instant};
 use std::{string, thread};
 use winit::dpi::LogicalSize;
 use winit::event::{Event, WindowEvent};
@@ -10,6 +12,7 @@ use winit::window::WindowBuilder;
 use winit_input_helper::WinitInputHelper;
 
 const FPS: f32 = 16.67; // 60 frames per second or 60 Hz
+const FPS60: Duration = Duration::from_micros(16_67);
 const SCREEN_WIDTH: u8 = 64;
 const SCREEN_HEIGHT: u8 = 32;
 const FONTSET_START_ADDRESS: u16 = 0x50;
@@ -64,8 +67,11 @@ fn main() -> Result<(), Error> {
     //     // loop for chip8 emulator
     // });
 
+    let mut next_frame_time = Instant::now();
+
     let res = event_loop.run(|event, event_loop_window_target| {
         println!("Event: {:?}", event);
+        event_loop_window_target.set_control_flow(ControlFlow::WaitUntil(next_frame_time));
         match event {
             Event::WindowEvent {
                 event: WindowEvent::CloseRequested,
@@ -106,8 +112,8 @@ fn main() -> Result<(), Error> {
                 }
             }
             Event::AboutToWait => {
-                // read rx to render
-                // window.request_redraw();
+                next_frame_time = Instant::now() + FPS60;
+                window.request_redraw();
             }
             _ => {}
         }
