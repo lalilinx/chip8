@@ -43,7 +43,6 @@ const FONTSET: [u8; 80] = [
 fn main() -> Result<(), Error> {
     // let (tx, rx) = mpsc::channel::<&[u8]>();
     let event_loop = EventLoop::new().unwrap();
-    // event_loop.set_control_flow(ControlFlow::Poll);
     let mut input = WinitInputHelper::new();
     let window = {
         let size = LogicalSize::new(SCREEN_WIDTH as f64 * 10.0, SCREEN_HEIGHT as f64 * 10.0);
@@ -56,6 +55,7 @@ fn main() -> Result<(), Error> {
     };
 
     let screen_buffer = Arc::new(Mutex::new([[0; 64]; 32]));
+    let _screen_buffer = Arc::clone(&screen_buffer);
 
     let mut pixels = {
         let window_size = window.inner_size();
@@ -63,9 +63,53 @@ fn main() -> Result<(), Error> {
         Pixels::new(SCREEN_WIDTH as u32, SCREEN_HEIGHT as u32, surface_texture)?
     };
 
-    // thread::spawn(move || {
-    //     // loop for chip8 emulator
-    // });
+    thread::spawn(move || {
+        let mut draw_flag: bool = false;
+        let instruction_interval = Duration::from_nanos(1_000_000_000 / INSTRUCTION_HZ);
+        let render_interval = Duration::from_nanos(1_000_000_000 / RENDER_HZ);
+        let timer_interval = Duration::from_nanos(1_000_000_000 / TIMER_HZ);
+
+        let mut last_instruction_tick = Instant::now();
+        let mut last_render_tick = Instant::now();
+        let mut last_timer_tick = Instant::now();
+
+        // loop for chip8 emulator
+        loop {
+            let now = Instant::now();
+
+            //using while loop for catch up missing execution instructions (gen-ai suggestion)
+            while now.duration_since(last_instruction_tick) >= instruction_interval {
+                // fetch, decode, and execute instructions
+                //chip8 fetch
+                //chip8 decode and execute
+                last_instruction_tick += instruction_interval;
+            }
+
+            if draw_flag && now.duration_since(last_render_tick) >= render_interval {
+                // render frame buffer to screen
+                // let buffer = _screen_buffer.lock().unwrap();
+                last_render_tick += render_interval;
+                draw_flag = false;
+            }
+
+            while now.duration_since(last_timer_tick) >= timer_interval {
+                // update delay_timers and sound_timers
+                last_timer_tick += timer_interval;
+            }
+
+            let next_instruction_tick = last_instruction_tick + instruction_interval;
+            let next_render_tick = last_render_tick + render_interval;
+            let next_timer_tick = last_timer_tick + timer_interval;
+
+            let next_tick = next_instruction_tick
+                .min(next_render_tick)
+                .min(next_timer_tick);
+            let sleep_duration = next_tick.duration_since(now);
+            if sleep_duration > Duration::from_millis(0) {
+                std::thread::sleep(sleep_duration);
+            }
+        }
+    });
 
     let mut next_frame_time = Instant::now();
 
@@ -121,49 +165,6 @@ fn main() -> Result<(), Error> {
         // window.request_redraw();
     });
     res.map_err(|e| Error::UserDefined(Box::new(e)))
-
-    // let mut draw_flag: bool = false;
-    // let instruction_interval = Duration::from_nanos(1_000_000_000 / INSTRUCTION_HZ);
-    // let render_interval = Duration::from_nanos(1_000_000_000 / RENDER_HZ);
-    // let timer_interval = Duration::from_nanos(1_000_000_000 / TIMER_HZ);
-
-    // let mut last_instruction_tick = Instant::now();
-    // let mut last_render_tick = Instant::now();
-    // let mut last_timer_tick = Instant::now();
-
-    // loop {
-    //     let now = Instant::now();
-
-    //     //using while loop for catch up missing execution instructions (gen-ai suggestion)
-    //     while now.duration_since(last_instruction_tick) >= instruction_interval {
-    //         // fetch, decode, and execute instructions
-    //         last_instruction_tick += instruction_interval;
-    //     }
-
-    //     if draw_flag && now.duration_since(last_render_tick) >= render_interval {
-    //         // render frame buffer to screen
-
-    //         last_render_tick += render_interval;
-    //         draw_flag = false;
-    //     }
-
-    //     while now.duration_since(last_timer_tick) >= timer_interval {
-    //         // update delay_timers and sound_timers
-    //         last_timer_tick += timer_interval;
-    //     }
-
-    //     let next_instruction_tick = last_instruction_tick + instruction_interval;
-    //     let next_render_tick = last_render_tick + render_interval;
-    //     let next_timer_tick = last_timer_tick + timer_interval;
-
-    //     let next_tick = next_instruction_tick
-    //         .min(next_render_tick)
-    //         .min(next_timer_tick);
-    //     let sleep_duration = next_tick.duration_since(now);
-    //     if sleep_duration > Duration::from_millis(0) {
-    //         std::thread::sleep(sleep_duration);
-    //     }
-    // }
 }
 
 struct Chip8 {
