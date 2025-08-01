@@ -54,7 +54,7 @@ fn main() -> Result<(), Error> {
             .unwrap()
     };
 
-    let screen_buffer = Arc::new(Mutex::new([[0; 64]; 32]));
+    let screen_buffer = Arc::new(Mutex::new([[0u8; 64]; 32]));
     let _screen_buffer = Arc::clone(&screen_buffer);
 
     let mut pixels = {
@@ -180,8 +180,8 @@ struct Chip8 {
     memory: [u8; 4096],
 
     draw_flag: bool,
-    frame_buffer: [[u8; 64]; 32], // memory: Memory,
-                                  // frame: [u8; ]
+    frame_buffer: Arc<Mutex<[[u8; 64]; 32]>>, // memory: Memory,
+                                              // frame: [u8; ]
 }
 
 fn nibble(value: &u16, n: u8) -> u8 {
@@ -225,8 +225,10 @@ impl Chip8 {
                 match inst & 0x0FFF {
                     0x00E0 => {
                         // clear screen
-                        self.frame_buffer = [[0; 64]; 32];
-                        self.draw_flag = true;
+                        {
+                            *self.frame_buffer.lock().unwrap() = [[0; 64]; 32];
+                            self.draw_flag = true;
+                        }
                     }
                     0x00EE => {
                         // return from subroutine
@@ -391,16 +393,19 @@ impl Chip8 {
                 let i = self.i as usize;
 
                 let mut vf: u8 = 0x0;
-                for row in 0..n {
-                    let cur_sprite = self.memory[i + row];
-                    for col in 0..8usize {
-                        if cur_sprite & (0x80 >> col) == 1 {
-                            let idx_x = (vx + col) % SCREEN_WIDTH as usize;
-                            let idx_y = (vy + row) % SCREEN_HEIGHT as usize;
-                            if self.frame_buffer[idx_y][idx_x] == 0x1 {
-                                vf = 0x1;
+                {
+                    let mut buffer = self.frame_buffer.lock().unwrap();
+                    for row in 0..n {
+                        let cur_sprite = self.memory[i + row];
+                        for col in 0..8usize {
+                            if cur_sprite & (0x80 >> col) != 0 {
+                                let idx_x = (vx + col) % SCREEN_WIDTH as usize;
+                                let idx_y = (vy + row) % SCREEN_HEIGHT as usize;
+                                if buffer[idx_y][idx_x] == 0x1 {
+                                    vf = 0x1;
+                                }
+                                buffer[idx_y][idx_x] ^= 1;
                             }
-                            self.frame_buffer[idx_y][idx_x] ^= 1;
                         }
                     }
                 }
