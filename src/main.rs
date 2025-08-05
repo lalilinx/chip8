@@ -1,6 +1,9 @@
 use pixels::wgpu::Instance;
+use pixels::wgpu::naga::Bytes;
 use pixels::{Error, Pixels, SurfaceTexture};
 use rand::Rng;
+use std::fs;
+use std::io;
 use std::sync::{Arc, Mutex, mpsc};
 use std::time::{Duration, Instant};
 use std::{string, thread};
@@ -16,6 +19,11 @@ const FPS60: Duration = Duration::from_micros(16_67);
 const SCREEN_WIDTH: u8 = 64;
 const SCREEN_HEIGHT: u8 = 32;
 const FONTSET_START_ADDRESS: u16 = 0x50;
+
+const MEMORY_SIZE: usize = 4096;
+const PROGRAM_START_LOC: usize = 0x200;
+
+const FONT_START_LOC: usize = 0x50;
 
 const INSTRUCTION_HZ: u64 = 700;
 const RENDER_HZ: u64 = 120;
@@ -64,6 +72,9 @@ fn main() -> Result<(), Error> {
     };
 
     thread::spawn(move || {
+        let mut chip8 = Chip8::new_with_buffer(_screen_buffer);
+        chip8.init();
+
         let mut draw_flag: bool = false;
         let instruction_interval = Duration::from_nanos(1_000_000_000 / INSTRUCTION_HZ);
         let render_interval = Duration::from_nanos(1_000_000_000 / RENDER_HZ);
@@ -189,14 +200,48 @@ fn nibble(value: &u16, n: u8) -> u8 {
 }
 
 impl Chip8 {
+    fn new_with_buffer(buffer: Arc<Mutex<[[u8; 64]; 32]>>) -> Self {
+        Self {
+            registers: [0x0; 16],
+            i: 0x0,
+            pc: 0x0,
+            sp: 0x0,
+            stack: [0x0; 16],
+            delay_timer: 0x0,
+            sound_timer: 0x0,
+            keypad: [false; 16],
+            memory: [0x0; 4096],
+            draw_flag: false,
+            frame_buffer: buffer,
+        }
+    }
+
     fn init(&mut self) {
-        self.pc = 0x200;
+        self.pc = PROGRAM_START_LOC as u16;
         self.sp = 0x0;
 
         //load font to memory
-        //
+        for (i, &font) in FONTSET.iter().enumerate() {
+            self.memory[FONT_START_LOC + i] = font;
+        }
     }
-    fn load_rom(&mut self, path: String) {}
+
+    fn load_rom(&mut self, path: String) -> Result<(), io::Error> {
+        let rom_data = fs::read(path)?;
+
+        if rom_data.len() > MEMORY_SIZE - PROGRAM_START_LOC {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "ROM file too large",
+            ));
+        }
+
+        for (i, &byte) in rom_data.iter().enumerate() {
+            self.memory[PROGRAM_START_LOC + i] = byte;
+        }
+        println!("Loaded ROM: {} bytes", rom_data.len());
+        Ok(())
+    }
     fn cycle(&mut self) {
         // loop {
         let opcode: u16 = self.fetch();
