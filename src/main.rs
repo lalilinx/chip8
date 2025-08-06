@@ -1,12 +1,11 @@
-use pixels::wgpu::Instance;
-use pixels::wgpu::naga::Bytes;
+use crossbeam_channel::{select, unbounded};
 use pixels::{Error, Pixels, SurfaceTexture};
 use rand::Rng;
 use std::fs;
 use std::io;
-use std::sync::{Arc, Mutex, mpsc};
+use std::sync::{Arc, Mutex};
+use std::thread;
 use std::time::{Duration, Instant};
-use std::{string, thread};
 use winit::dpi::LogicalSize;
 use winit::event::{Event, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
@@ -50,6 +49,7 @@ const FONTSET: [u8; 80] = [
 
 fn main() -> Result<(), Error> {
     // let (tx, rx) = mpsc::channel::<&[u8]>();
+    let (sender, reciever) = unbounded::<u16>();
     let event_loop = EventLoop::new().unwrap();
     let mut input = WinitInputHelper::new();
     let window = {
@@ -87,6 +87,13 @@ fn main() -> Result<(), Error> {
         // loop for chip8 emulator
         loop {
             let now = Instant::now();
+
+            select! {
+                recv(reciever) -> msg => {
+                    //update_input
+                },
+                default() => {}
+            }
 
             //using while loop for catch up missing execution instructions (gen-ai suggestion)
             while now.duration_since(last_instruction_tick) >= instruction_interval {
@@ -241,6 +248,12 @@ impl Chip8 {
         }
         println!("Loaded ROM: {} bytes", rom_data.len());
         Ok(())
+    }
+
+    fn update_input(&mut self, key: usize, status: bool) {
+        if key < 0x11 {
+            self.keypad[key] = status;
+        }
     }
     fn cycle(&mut self) {
         // loop {
