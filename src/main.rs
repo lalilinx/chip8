@@ -1,13 +1,14 @@
 use crossbeam_channel::{select, unbounded};
 use pixels::{Error, Pixels, SurfaceTexture};
 use rand::Rng;
+use std::collections::HashMap;
 use std::fs;
 use std::io;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 use winit::dpi::LogicalSize;
-use winit::event::{Event, WindowEvent};
+use winit::event::{ElementState, Event, KeyEvent, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::WindowBuilder;
@@ -15,6 +16,7 @@ use winit_input_helper::WinitInputHelper;
 
 const FPS: f32 = 16.67; // 60 frames per second or 60 Hz
 const FPS60: Duration = Duration::from_micros(16_67);
+// const FPS60: Duration = Duration::from_secs(3);
 const SCREEN_WIDTH: u8 = 64;
 const SCREEN_HEIGHT: u8 = 32;
 const FONTSET_START_ADDRESS: u16 = 0x50;
@@ -49,7 +51,7 @@ const FONTSET: [u8; 80] = [
 
 fn main() -> Result<(), Error> {
     // let (tx, rx) = mpsc::channel::<&[u8]>();
-    let (sender, reciever) = unbounded::<u16>();
+    let (sender, reciever) = unbounded::<KeyEvent>();
     let event_loop = EventLoop::new().unwrap();
     let mut input = WinitInputHelper::new();
     let window = {
@@ -62,7 +64,7 @@ fn main() -> Result<(), Error> {
             .unwrap()
     };
 
-    let screen_buffer = Arc::new(Mutex::new([[0u8; 64]; 32]));
+    let screen_buffer = Arc::new(Mutex::new([[1u8; 64]; 32]));
     let _screen_buffer = Arc::clone(&screen_buffer);
 
     let mut pixels = {
@@ -89,8 +91,15 @@ fn main() -> Result<(), Error> {
             let now = Instant::now();
 
             select! {
-                recv(reciever) -> msg => {
+                recv(reciever) -> message => {
                     //update_input
+                    match message {
+                        Ok(result) => {
+                            chip8.handle_input(result);
+                            chip8.input_handler.display_key_states();
+                        },
+                        Err(error) => println!("Error: {}", error),
+                    }
                 },
                 default() => {}
             }
@@ -132,7 +141,7 @@ fn main() -> Result<(), Error> {
     let mut next_frame_time = Instant::now();
 
     let res = event_loop.run(|event, event_loop_window_target| {
-        println!("Event: {:?}", event);
+        // println!("Event: {:?}", event);
         event_loop_window_target.set_control_flow(ControlFlow::WaitUntil(next_frame_time));
         match event {
             Event::WindowEvent {
@@ -146,25 +155,51 @@ fn main() -> Result<(), Error> {
             Event::WindowEvent {
                 event: WindowEvent::KeyboardInput { event, .. },
                 ..
-            } => match event.physical_key {
-                PhysicalKey::Code(KeyCode::KeyQ) => println!("Key Q pressed"),
-                PhysicalKey::Code(KeyCode::KeyW) => println!("Key W pressed"),
-                PhysicalKey::Code(KeyCode::KeyE) => println!("Key E pressed"),
-                PhysicalKey::Code(KeyCode::KeyR) => println!("Key R pressed"),
-                _ => {}
-            },
+            } => {
+                // match event.physical_key {
+                //     PhysicalKey::Code(KeyCode::KeyQ) => println!("Key Q pressed"),223
+                //     PhysicalKey::Code(KeyCode::KeyW) => println!("Key W pressed"),
+                //     PhysicalKey::Code(KeyCode::KeyE) => println!("Key E pressed"),
+                //     PhysicalKey::Code(KeyCode::KeyR) => println!("Key R pressed"),
+                //     _ => {}
+                // },
+                // if let PhysicalKey::Code(key_code) = event.physical_key {
+                //     sender.send(key_code);
+                // }
+
+                sender.try_send(event);
+            }
             Event::WindowEvent {
                 event: WindowEvent::RedrawRequested,
                 ..
             } => {
                 // Redraw the window
-                // call rx
+
+                // print!("drawwww");
+                // let buf = screen_buffer.lock().unwrap();
+                // let frame = pixels.frame_mut();
+                // for (i, row) in buf.iter().enumerate() {
+                //     for (j, col) in row.iter().enumerate() {
+                //         let v = if *col == 1 { 0xFF } else { 0x00 };
+                //         let ofset = i * j * 4;
+                //         frame[ofset..ofset + 4].copy_from_slice(&[v, v, v, 0xFF]);
+                //     }
+                // }
+
+                // if pixels.render().is_err() {
+                //     event_loop_window_target.exit();
+                // }
+            }
+            Event::AboutToWait => {
+                next_frame_time = Instant::now() + FPS60;
+                // window.request_redraw();
+
                 let buf = screen_buffer.lock().unwrap();
                 let frame = pixels.frame_mut();
                 for (i, row) in buf.iter().enumerate() {
                     for (j, col) in row.iter().enumerate() {
                         let v = if *col == 1 { 0xFF } else { 0x00 };
-                        let ofset = i * j * 4;
+                        let ofset = (i * SCREEN_WIDTH as usize + j) * 4;
                         frame[ofset..ofset + 4].copy_from_slice(&[v, v, v, 0xFF]);
                     }
                 }
@@ -173,16 +208,99 @@ fn main() -> Result<(), Error> {
                     event_loop_window_target.exit();
                 }
             }
-            Event::AboutToWait => {
-                next_frame_time = Instant::now() + FPS60;
-                window.request_redraw();
-            }
             _ => {}
         }
 
         // window.request_redraw();
     });
     res.map_err(|e| Error::UserDefined(Box::new(e)))
+}
+
+struct InputHandler {
+    keypad: [bool; 16],
+    key_mapping: HashMap<KeyCode, u8>,
+}
+
+impl InputHandler {
+    fn new() -> Self {
+        let mut key_mapping = HashMap::new();
+
+        key_mapping.insert(KeyCode::Digit1, 0x1);
+        key_mapping.insert(KeyCode::Digit2, 0x2);
+        key_mapping.insert(KeyCode::Digit3, 0x3);
+        key_mapping.insert(KeyCode::Digit4, 0xC);
+
+        key_mapping.insert(KeyCode::KeyQ, 0x4);
+        key_mapping.insert(KeyCode::KeyW, 0x5);
+        key_mapping.insert(KeyCode::KeyE, 0x6);
+        key_mapping.insert(KeyCode::KeyR, 0xD);
+
+        key_mapping.insert(KeyCode::KeyA, 0x7);
+        key_mapping.insert(KeyCode::KeyS, 0x8);
+        key_mapping.insert(KeyCode::KeyD, 0x9);
+        key_mapping.insert(KeyCode::KeyF, 0xE);
+
+        key_mapping.insert(KeyCode::KeyZ, 0xA);
+        key_mapping.insert(KeyCode::KeyX, 0x0);
+        key_mapping.insert(KeyCode::KeyC, 0xB);
+        key_mapping.insert(KeyCode::KeyV, 0xF);
+
+        Self {
+            keypad: [false; 16],
+            key_mapping,
+        }
+    }
+
+    fn key_pressed(&mut self, key_code: KeyCode) {
+        if let Some(&chip8_key) = self.key_mapping.get(&key_code) {
+            self.keypad[chip8_key as usize] = true;
+        }
+    }
+    fn key_released(&mut self, key_code: KeyCode) {
+        if let Some(&chip8_key) = self.key_mapping.get(&key_code) {
+            self.keypad[chip8_key as usize] = false;
+        }
+    }
+    fn is_key_pressed(&self, key: u8) -> bool {
+        if key < 16 {
+            self.keypad[key as usize]
+        } else {
+            false
+        }
+    }
+
+    fn display_key_states(&self) {
+        println!("CHIP-8 Key States:");
+        println!(
+            "1:{} 2:{} 3:{} C:{}",
+            if self.keypad[0x1] { "█" } else { "." },
+            if self.keypad[0x2] { "█" } else { "." },
+            if self.keypad[0x3] { "█" } else { "." },
+            if self.keypad[0xC] { "█" } else { "." }
+        );
+        println!(
+            "4:{} 5:{} 6:{} D:{}",
+            if self.keypad[0x4] { "█" } else { "." },
+            if self.keypad[0x5] { "█" } else { "." },
+            if self.keypad[0x6] { "█" } else { "." },
+            if self.keypad[0xD] { "█" } else { "." }
+        );
+        println!(
+            "7:{} 8:{} 9:{} E:{}",
+            if self.keypad[0x7] { "█" } else { "." },
+            if self.keypad[0x8] { "█" } else { "." },
+            if self.keypad[0x9] { "█" } else { "." },
+            if self.keypad[0xE] { "█" } else { "." }
+        );
+        println!(
+            "A:{} 0:{} B:{} F:{}",
+            if self.keypad[0xA] { "█" } else { "." },
+            if self.keypad[0x0] { "█" } else { "." },
+            if self.keypad[0xB] { "█" } else { "." },
+            if self.keypad[0xF] { "█" } else { "." }
+        );
+        println!();
+    }
 }
 
 struct Chip8 {
@@ -193,9 +311,10 @@ struct Chip8 {
     stack: [u16; 16], // Stack for storing return addresses
     delay_timer: u8,
     sound_timer: u8,
-    keypad: [bool; 16],
-
+    // keypad: [bool; 16],
     memory: [u8; 4096],
+
+    input_handler: InputHandler,
 
     draw_flag: bool,
     frame_buffer: Arc<Mutex<[[u8; 64]; 32]>>, // memory: Memory,
@@ -216,7 +335,8 @@ impl Chip8 {
             stack: [0x0; 16],
             delay_timer: 0x0,
             sound_timer: 0x0,
-            keypad: [false; 16],
+            // keypad: [false; 16],
+            input_handler: InputHandler::new(),
             memory: [0x0; 4096],
             draw_flag: false,
             frame_buffer: buffer,
@@ -250,11 +370,19 @@ impl Chip8 {
         Ok(())
     }
 
-    fn update_input(&mut self, key: usize, status: bool) {
-        if key < 0x11 {
-            self.keypad[key] = status;
+    fn handle_input(&mut self, event: KeyEvent) {
+        if let PhysicalKey::Code(key_code) = event.physical_key {
+            match event.state {
+                ElementState::Pressed => {
+                    self.input_handler.key_pressed(key_code);
+                }
+                ElementState::Released => {
+                    self.input_handler.key_released(key_code);
+                }
+            }
         }
     }
+
     fn cycle(&mut self) {
         // loop {
         let opcode: u16 = self.fetch();
@@ -474,15 +602,17 @@ impl Chip8 {
                 let vx: u8 = self.get_register_data(&x);
 
                 let indic: u16 = inst & 0x00FF;
+
+                let is_press = self.input_handler.is_key_pressed(vx);
                 match indic {
                     0x9E => {
-                        let is_press = self.keypad[vx as usize];
+                        // let is_press = self.keypad[vx as usize];
                         if is_press {
                             self.pc += 2;
                         }
                     }
                     0xA1 => {
-                        let is_press = self.keypad[vx as usize];
+                        // let is_press = self.keypad[vx as usize];
                         if !is_press {
                             self.pc += 2;
                         }
@@ -501,7 +631,7 @@ impl Chip8 {
                     }
                     0xA => {
                         for key in 0..16 {
-                            if self.keypad[key] {
+                            if self.input_handler.is_key_pressed(key) {
                                 self.register(x, key as u8);
                                 return;
                             }
