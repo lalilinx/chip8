@@ -73,7 +73,7 @@ fn main() -> Result<(), Error> {
         Pixels::new(SCREEN_WIDTH as u32, SCREEN_HEIGHT as u32, surface_texture)?
     };
 
-    thread::spawn(move || {
+    let worker = thread::spawn(move || {
         let mut chip8 = Chip8::new_with_buffer(_screen_buffer);
         chip8.init();
 
@@ -98,8 +98,12 @@ fn main() -> Result<(), Error> {
                             chip8.handle_input(result);
                             chip8.input_handler.display_key_states();
                         },
-                        Err(error) => println!("Error: {}", error),
+                        Err(error) => {
+                            println!("Error: {}", error);
+                            break
+                        },
                     }
+
                 },
                 default() => {}
             }
@@ -138,17 +142,13 @@ fn main() -> Result<(), Error> {
         }
     });
 
-    let mut next_frame_time = Instant::now();
-
     let res = event_loop.run(|event, event_loop_window_target| {
         // println!("Event: {:?}", event);
-        event_loop_window_target.set_control_flow(ControlFlow::WaitUntil(next_frame_time));
         match event {
             Event::WindowEvent {
                 event: WindowEvent::CloseRequested,
                 ..
             } => {
-                println!("Window close requested");
                 event_loop_window_target.exit();
             }
 
@@ -156,44 +156,23 @@ fn main() -> Result<(), Error> {
                 event: WindowEvent::KeyboardInput { event, .. },
                 ..
             } => {
-                // match event.physical_key {
-                //     PhysicalKey::Code(KeyCode::KeyQ) => println!("Key Q pressed"),223
-                //     PhysicalKey::Code(KeyCode::KeyW) => println!("Key W pressed"),
-                //     PhysicalKey::Code(KeyCode::KeyE) => println!("Key E pressed"),
-                //     PhysicalKey::Code(KeyCode::KeyR) => println!("Key R pressed"),
-                //     _ => {}
-                // },
-                // if let PhysicalKey::Code(key_code) = event.physical_key {
-                //     sender.send(key_code);
-                // }
-
-                sender.try_send(event);
+                if let Err(send_err) = sender.try_send(event) {
+                    use crossbeam_channel::TrySendError;
+                    match send_err {
+                        TrySendError::Full(f) => {}
+                        TrySendError::Disconnected(d) => {
+                            println!("Disconnected receiver")
+                        }
+                    }
+                    event_loop_window_target.exit();
+                }
+                window.request_redraw();
             }
             Event::WindowEvent {
                 event: WindowEvent::RedrawRequested,
                 ..
             } => {
                 // Redraw the window
-
-                // print!("drawwww");
-                // let buf = screen_buffer.lock().unwrap();
-                // let frame = pixels.frame_mut();
-                // for (i, row) in buf.iter().enumerate() {
-                //     for (j, col) in row.iter().enumerate() {
-                //         let v = if *col == 1 { 0xFF } else { 0x00 };
-                //         let ofset = i * j * 4;
-                //         frame[ofset..ofset + 4].copy_from_slice(&[v, v, v, 0xFF]);
-                //     }
-                // }
-
-                // if pixels.render().is_err() {
-                //     event_loop_window_target.exit();
-                // }
-            }
-            Event::AboutToWait => {
-                next_frame_time = Instant::now() + FPS60;
-                // window.request_redraw();
-
                 let buf = screen_buffer.lock().unwrap();
                 let frame = pixels.frame_mut();
                 for (i, row) in buf.iter().enumerate() {
@@ -207,12 +186,21 @@ fn main() -> Result<(), Error> {
                 if pixels.render().is_err() {
                     event_loop_window_target.exit();
                 }
+
+                event_loop_window_target
+                    .set_control_flow(ControlFlow::WaitUntil(Instant::now() + FPS60));
+            }
+            Event::AboutToWait => {
+                window.request_redraw();
             }
             _ => {}
         }
-
-        // window.request_redraw();
     });
+
+    println!("shuting down...");
+    //close sender
+    drop(sender);
+    worker.join().unwrap();
     res.map_err(|e| Error::UserDefined(Box::new(e)))
 }
 
