@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 use winit::dpi::LogicalSize;
-use winit::event::{ElementState, Event, KeyEvent, WindowEvent};
+use winit::event::{ElementState, Event, KeyEvent, StartCause, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::WindowBuilder;
@@ -77,9 +77,9 @@ fn main() -> Result<(), Error> {
         let mut chip8 = Chip8::new_with_buffer(_screen_buffer);
         chip8.init();
 
-        let mut draw_flag: bool = false;
+        // let mut draw_flag: bool = true;
         let instruction_interval = Duration::from_nanos(1_000_000_000 / INSTRUCTION_HZ);
-        let render_interval = Duration::from_nanos(1_000_000_000 / RENDER_HZ);
+        // let render_interval = Duration::from_nanos(1_000_000_000 / RENDER_HZ);
         let timer_interval = Duration::from_nanos(1_000_000_000 / TIMER_HZ);
 
         let mut last_instruction_tick = Instant::now();
@@ -116,12 +116,12 @@ fn main() -> Result<(), Error> {
                 last_instruction_tick += instruction_interval;
             }
 
-            if draw_flag && now.duration_since(last_render_tick) >= render_interval {
-                // render frame buffer to screen
-                // let buffer = _screen_buffer.lock().unwrap();
-                last_render_tick += render_interval;
-                draw_flag = false;
-            }
+            // if draw_flag && now.duration_since(last_render_tick) >= render_interval {
+            //     // render frame buffer to screen
+            //     // let buffer = _screen_buffer.lock().unwrap();
+            //     last_render_tick += render_interval;
+            //     draw_flag = false;
+            // }
 
             while now.duration_since(last_timer_tick) >= timer_interval {
                 // update delay_timers and sound_timers
@@ -129,11 +129,11 @@ fn main() -> Result<(), Error> {
             }
 
             let next_instruction_tick = last_instruction_tick + instruction_interval;
-            let next_render_tick = last_render_tick + render_interval;
+            // let next_render_tick = last_render_tick + render_interval;
             let next_timer_tick = last_timer_tick + timer_interval;
 
             let next_tick = next_instruction_tick
-                .min(next_render_tick)
+                // .min(next_render_tick)
                 .min(next_timer_tick);
             let sleep_duration = next_tick.duration_since(now);
             if sleep_duration > Duration::from_millis(0) {
@@ -191,9 +191,15 @@ fn main() -> Result<(), Error> {
                     .set_control_flow(ControlFlow::WaitUntil(Instant::now() + FPS60));
             }
             Event::AboutToWait => {
+                // println!("AboutToWait - entering wait state");
+            }
+            Event::NewEvents(StartCause::ResumeTimeReached { .. }) => {
+                // เวลาถึงแล้ว - request redraw
                 window.request_redraw();
             }
-            _ => {}
+            _ => {
+                // println!("Other window event: {:?}", event);
+            }
         }
     });
 
@@ -371,15 +377,7 @@ impl Chip8 {
         }
     }
 
-    fn cycle(&mut self) {
-        // loop {
-        let opcode: u16 = self.fetch();
-
-        self.pc += 2;
-
-        //decode and execute
-        self.decode_and_execute(opcode);
-
+    fn update_timer(&mut self) {
         if self.delay_timer > 0 {
             self.delay_timer -= 1;
         }
@@ -387,6 +385,15 @@ impl Chip8 {
         if self.sound_timer > 0 {
             self.sound_timer -= 1;
         }
+    }
+
+    fn cycle(&mut self) {
+        let opcode: u16 = self.fetch();
+
+        self.pc += 2;
+
+        //decode and execute
+        self.decode_and_execute(opcode);
     }
     fn fetch(&self) -> u16 {
         (self.memory[self.pc as usize] as u16) << 0x8
